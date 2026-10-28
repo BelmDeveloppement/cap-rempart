@@ -55,5 +55,23 @@ window.CR = window.CR || {};
       } catch (e) { res(false); }
     });
   };
+  // Cherche la seance sur chaque relais (eleve qui saisit le code) : renvoie l'index du relais qui porte le document ctl, ou -1
+  CR.find = function (code, mode) {
+    if (mode === "local") return Promise.resolve(0);
+    function one(idx) {
+      return new Promise(function (res) {
+        var done = false, c, base = CR.BASE + code + "/";
+        function fin(v) { if (done) return; done = true; clearTimeout(to); try { c.end(true); } catch (e) { } res(v); }
+        var to = setTimeout(function () { fin(false); }, 5000);
+        try {
+          c = mqtt.connect(CR.BROKERS[idx], { clientId: "crf_" + Math.random().toString(16).slice(2, 8), reconnectPeriod: 0, connectTimeout: 4500 });
+          c.on("connect", function () { c.subscribe(base + "ctl", { qos: 1 }); });
+          c.on("message", function (t, p) { if (p && p.length) fin(true); });
+          c.on("error", function () { fin(false); });
+        } catch (e) { res(false); }
+      });
+    }
+    return Promise.all(CR.BROKERS.map(function (b, i) { return one(i); })).then(function (r) { return r.indexOf(true); });
+  };
   CR.Net = Net;
 })(window.CR);

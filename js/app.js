@@ -178,8 +178,15 @@
     if (act === "joinplay" || act === "jointower") {
       var code = (document.getElementById("in-code").value || "").trim().toUpperCase(); var t = document.getElementById("in-table").value;
       if (!/^[A-Z0-9]{4,8}$/.test(code)) { toast("Code de séance invalide"); return; }
-      var q = r.q || {}; var suf = "?b=" + (q.b || 0) + (q.net === "local" ? "&net=local" : "");
-      go(act === "joinplay" ? "/play/" + code + "/" + t + "/" + X.pickP + suf : "/tower/" + code + "/" + t + suf); return;
+      var q = r.q || {}; var isLocal = q.net === "local";
+      function dest(b) { var suf = "?b=" + b + (isLocal ? "&net=local" : ""); go(act === "joinplay" ? "/play/" + code + "/" + t + "/" + X.pickP + suf : "/tower/" + code + "/" + t + suf); }
+      if (q.b !== undefined || isLocal) { dest(+(q.b || 0)); return; }
+      var lbl = el.textContent; el.disabled = true; el.textContent = "Recherche de la séance…";
+      CR.find(code, "mqtt").then(function (b) {
+        el.disabled = false; el.textContent = lbl;
+        if (b < 0) { toast("Séance « " + code + " » introuvable : vérifiez le code, que l'enseignant a ouvert la séance, et votre connexion"); return; }
+        dest(b);
+      }); return;
     }
     if (act === "resume") { var lt = X.lastTeacher; go("/teacher/" + lt.code + "?b=" + (lt.broker || 0) + (lt.net === "local" ? "&net=local" : "")); return; }
     if (act === "newsession") {
