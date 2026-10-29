@@ -33,7 +33,7 @@ window.CR = window.CR || {};
   CR.shuffled = function (n, seed) { var a = []; for (var i = 0; i < n; i++) a.push(i); var r = CR.rng(seed); for (var j = n - 1; j > 0; j--) { var k = Math.floor(r() * (j + 1)); var t = a[j]; a[j] = a[k]; a[k] = t; } if (n > 1) { var same = true; for (var q = 0; q < n; q++) if (a[q] !== q) same = false; if (same) { var x = a[0]; a[0] = a[1]; a[1] = x; } } return a; };
 
   // ---- questions applicables selon le niveau
-  CR.applicable = function (m, lvl) { var out = []; m.qs.forEach(function (q, i) { if (!q.x || lvl === "expert") out.push(i); }); return out; };
+  CR.applicable = function (m, lvl, ext) { var out = []; m.qs.forEach(function (q, i) { if ((!q.x || lvl === "expert") && (!q.ext || ext)) out.push(i); }); return out; };
 
   // ---- note d'une question : 0..1
   CR.scoreQ = function (q, ans, crit) {
@@ -48,7 +48,7 @@ window.CR = window.CR || {};
 
   // ---- resultat d'une mission pour une table
   CR.compute = function (m, snap, finalAns, crit, hintCount, freeHints) {
-    var idx = CR.applicable(m, snap.lvl), pts = 0, max = 0, per = {}, pendingOpen = false;
+    var idx = CR.applicable(m, snap.lvl, snap.ext), pts = 0, max = 0, per = {}, pendingOpen = false;
     idx.forEach(function (i) {
       var q = m.qs[i]; var s = CR.scoreQ(q, finalAns && finalAns[i], crit && crit[i]);
       per[i] = s; pts += s * q.p; max += q.p;
@@ -126,7 +126,7 @@ window.CR = window.CR || {};
   CR.elapsed = function (cm) { if (!cm || !cm.open) return 0; return Math.max(0, (cm.end || Date.now()) - cm.open); };
   // ---- resultat d'une mission pour une table : moyenne des joueurs presents (tous egaux)
   CR.computeTable = function (m, snap, byPlayer, crit, hintCount, freeHints) {
-    var idx = CR.applicable(m, snap.lvl), pts = 0, max = 0, per = {}, plist = Object.keys(byPlayer || {});
+    var idx = CR.applicable(m, snap.lvl, snap.ext), pts = 0, max = 0, per = {}, plist = Object.keys(byPlayer || {});
     idx.forEach(function (i) {
       var q = m.qs[i], s;
       if (q.t === "open") s = CR.scoreQ(q, null, crit && crit[i]);

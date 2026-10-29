@@ -80,7 +80,8 @@ window.CR = window.CR || {};
       '<div class="card"><h2>Je suis l\'enseignant</h2><p class="mut">Créez une séance (niveau, seuils, missions, attaques, classement) ou reprenez la séance en cours.</p>' +
       (X.lastTeacher ? '<button class="btn" data-act="resume">Reprendre la séance ' + esc(X.lastTeacher.code) + "</button> " : "") +
       '<button class="btn ' + (X.lastTeacher ? "sec" : "") + '" data-act="newsession">Nouvelle séance</button>' +
-      '<label style="margin-top:14px">Mode du relais</label><select id="in-net"><option value="mqtt">Réel (Internet)</option><option value="local">Test local (même navigateur)</option></select></div></div>';
+      '<label style="margin-top:14px">Mode du relais</label><select id="in-net"><option value="mqtt">Réel (Internet)</option><option value="local">Test local (même navigateur)</option></select></div></div>' +
+      '<div class="card" style="text-align:center;margin-top:12px"><h3>Inviter d\'autres joueurs</h3><div class="qr" data-qr="' + esc(X.base) + '" style="max-width:180px;margin:6px auto"></div><p class="small"><b>' + esc(X.base) + '</b></p><p class="mut small">Scannez ce QR code pour ouvrir l\'application sur un téléphone.</p></div>';
   };
 
   // ----------------------------------------------------------------- bandeaux
@@ -157,7 +158,7 @@ window.CR = window.CR || {};
       else return h + '<div class="card"><p>⏳ Cette mission n\'est pas encore ouverte. L\'enseignant la lancera.</p></div>';
     }
     var lvl = (r && r.snap && r.snap.lvl) || (cm && cm.lvl) || c.level;
-    var idx = CR.applicable(m, lvl);
+    var idx = CR.applicable(m, lvl, (r && r.snap && r.snap.ext !== undefined) ? r.snap.ext : (c.ext && c.ext[m.id]));
     var mine = X.mine[m.id] || { a: {}, h: [], done: false };
     if (r) return h + V.results(X, m, r, idx);
     if (cm && cm.closed) return h + '<div class="card"><p>🔒 La mission est fermée par l\'enseignant.</p></div>';
@@ -199,7 +200,7 @@ window.CR = window.CR || {};
       var given = answers.filter(function (a) { return a !== undefined; });
       var agree = given.every(function (a) { return CR.same(a, given[0]); });
       var anyAns = given.length > 0;
-      h += '<div class="card light"><div class="row sp"><b>Question ' + (n + 1) + (q.x ? " · bonus" : "") + '</b><span class="badge ' + (!anyAns ? "" : (agree ? "ok" : "warn")) + '">' + (!anyAns ? "pas de réponse" : (agree ? "Accord" : "À discuter")) + "</span></div>";
+      h += '<div class="card light"><div class="row sp"><b>Question ' + (n + 1) + (q.x ? " · bonus" : "") + (q.ext ? " · approfondissement" : "") + '</b><span class="badge ' + (!anyAns ? "" : (agree ? "ok" : "warn")) + '">' + (!anyAns ? "pas de réponse" : (agree ? "Accord" : "À discuter")) + "</span></div>";
       h += '<div style="margin:6px 0">' + esc(q.q.length > 170 ? q.q.slice(0, 167) + "…" : q.q) + "</div>";
       if (q.t !== "open") h += '<div class="chips">' + players.map(function (p, k) { return '<span class="chipa">J' + p + " : " + esc(CR.fmt(q, answers[k])) + "</span>"; }).join("") + "</div>";
       else h += players.map(function (p, k) { return answers[k] ? '<div class="corr"><b>Joueur ' + p + "</b><br>" + esc(answers[k]).replace(/\n/g, "<br>") + "</div>" : ""; }).join("");
@@ -224,7 +225,7 @@ window.CR = window.CR || {};
     h += "</div>";
     idx.forEach(function (i, n) {
       var q = m.qs[i];
-      h += '<div class="card light"><div class="row sp"><b>Question ' + (n + 1) + (q.x ? " · bonus" : "") + '</b><span class="badge">' + Math.round((r.per && r.per[i] != null ? r.per[i] : 0) * 100) + " %</span></div>";
+      h += '<div class="card light"><div class="row sp"><b>Question ' + (n + 1) + (q.x ? " · bonus" : "") + (q.ext ? " · approfondissement" : "") + '</b><span class="badge">' + Math.round((r.per && r.per[i] != null ? r.per[i] : 0) * 100) + " %</span></div>";
       if (q.t === "open") {
         h += '<div class="qt" style="margin-top:6px">' + esc(q.q) + '</div>';
         plist.forEach(function (p) { var t = (ans[p] || {})[i]; if (t) h += '<div class="corr"><b>Joueur ' + p + "</b><br>" + esc(t).replace(/\n/g, "<br>") + "</div>"; });
@@ -285,7 +286,7 @@ window.CR = window.CR || {};
     h += '<div class="card"><h3>Joueurs de la table</h3><div class="grid g3">';
     for (var p = 1; p <= 5; p++) {
       var j = X.docs["join/" + X.t + "/" + p]; var a = cur && X.docs["ans/" + X.t + "/" + p + "/" + cur.id];
-      var tot = cur ? CR.applicable(cur, cm.lvl).length : 0; var n = a && a.a ? Object.keys(a.a).length : 0;
+      var tot = cur ? CR.applicable(cur, cm.lvl, c.ext && c.ext[cur.id]).length : 0; var n = a && a.a ? Object.keys(a.a).length : 0;
       var res = cur && X.docs["res/" + X.t + "/" + cur.id];
       h += '<div class="card" style="margin:0;opacity:' + (j ? 1 : .4) + '"><b>Joueur ' + p + '</b> <span class="dot ' + (j ? "ok" : "") + '"></span><div class="bar" style="margin:6px 0"><i style="width:' + (tot ? Math.round(n / tot * 100) : 0) + '%"></i></div><div class="mut small">' + (j ? (!X.docs["rd/" + X.t + "/" + p] ? "briefing non lu" : (cur ? (a && a.ok ? "✓ validé" : (a && a.done ? "terminé, à valider" : n + " / " + tot + " questions")) : "briefing lu")) : "absent") + "</div></div>";
     }
@@ -318,7 +319,7 @@ window.CR = window.CR || {};
       var hint = c.hints && (c.hints["*:" + m.id]);
       h += "<tr><td>" + m.id + "</td><td><b>" + esc(m.title) + '</b><div class="mut small">' + esc(m.topic || "") + "</div></td><td>" + st + (cm && cm.open ? '<div class="mut small">' + CR.LEVELS[cm.lvl].label + " · " + cm.lo + "/" + cm.hi + "</div>" : "") + '</td><td class="mono" data-chrono="' + m.id + '">' + (cm && cm.open ? CR.mmss(CR.elapsed(cm)) : "--:--") + "</td><td>" + vals.length + (m.id === "F" ? "" : " / " + c.tables) + "</td><td>" + (vals.length ? Math.round(sum / vals.length) + " %" : "—") + '</td><td class="row" style="gap:4px">' +
         (!cm ? '<button class="btn sm" data-act="mopen" data-m="' + m.id + '">Ouvrir</button>' : (cm.closed ? '<button class="btn sm sec" data-act="mreopen" data-m="' + m.id + '">Rouvrir</button>' : '<button class="btn sm sec" data-act="mclose" data-m="' + m.id + '">Fermer</button>')) +
-        (m.id !== "F" ? '<button class="btn sm sec" data-act="mreveal" data-m="' + m.id + '">' + (c.reveal && c.reveal[m.id] ? "Corr. ✓" : "Révéler corr.") + '</button><button class="btn sm sec" data-act="mhint" data-m="' + m.id + '">' + (hint ? "Indices ✓" : "Indices offerts") + "</button>" : "") + "</td></tr>";
+        (m.id !== "F" && m.qs.some(function (q) { return q.ext; }) ? '<button class="btn sm ' + (c.ext && c.ext[m.id] ? "" : "sec") + '" data-act="mext" data-m="' + m.id + '">' + (c.ext && c.ext[m.id] ? "Approfondissement ✓" : "Approfondissement") + "</button>" : "") + (m.id !== "F" ? '<button class="btn sm sec" data-act="mreveal" data-m="' + m.id + '">' + (c.reveal && c.reveal[m.id] ? "Corr. ✓" : "Révéler corr.") + '</button><button class="btn sm sec" data-act="mhint" data-m="' + m.id + '">' + (hint ? "Indices ✓" : "Indices offerts") + "</button>" : "") + "</td></tr>";
     });
     h += "</table></div>";
     // classement

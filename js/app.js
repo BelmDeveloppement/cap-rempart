@@ -96,7 +96,7 @@
     if (!ready.length || (!force && ready.length < need.length)) return;
     if (X.finishing === X.t + ":" + m.id) return; X.finishing = X.t + ":" + m.id;
     var res = buildRes(m, m.id, "graded", {}, null);
-    var hasOpen = CR.applicable(m, res.snap.lvl).some(function (i) { return m.qs[i].t === "open"; });
+    var hasOpen = CR.applicable(m, res.snap.lvl, res.snap.ext).some(function (i) { return m.qs[i].t === "open"; });
     if (hasOpen) res.status = "pending";
     pub("res/" + X.t + "/" + m.id, res);
   }
@@ -141,7 +141,7 @@
   }
 
   function buildRes(m, mid, status, crit, existing) {
-    var c = X.ctl, cm = c.missions[mid]; var snap = (existing && existing.snap) || { lvl: cm.lvl, lo: cm.lo, hi: cm.hi };
+    var c = X.ctl, cm = c.missions[mid]; var snap = (existing && existing.snap) || { lvl: cm.lvl, lo: cm.lo, hi: cm.hi, ext: !!(c.ext && c.ext[mid]) };
     var force = c.force && c.force[X.t + ":" + mid]; var hs = {}, by = {};
     if (existing && existing.ans) by = existing.ans;
     else X.present.forEach(function (p) { var d = X.docs["ans/" + X.t + "/" + p + "/" + mid]; if (d && d.done && (d.ok || force)) { by[p] = d.a || {}; if (d.h) d.h.forEach(function (i) { hs[i] = 1; }); } });
@@ -225,7 +225,7 @@
     }
     if (act === "hint") { var ii = +el.getAttribute("data-i"); var mm = mineOf(mid); if (mm.h.indexOf(ii) < 0) mm.h.push(ii); saveMine(mid); render(); return; }
     if (act === "prev" || act === "next") {
-      var len = mid === "F" ? D.final.length : CR.applicable(m, (X.ctl.missions[mid] || {}).lvl || X.ctl.level).length;
+      var len = mid === "F" ? D.final.length : CR.applicable(m, (X.ctl.missions[mid] || {}).lvl || X.ctl.level, X.ctl.ext && X.ctl.ext[mid]).length;
       var cur = X.qpos[mid] || 0; cur += act === "next" ? 1 : -1; X.qpos[mid] = Math.max(0, Math.min(len - 1, cur)); render(); window.scrollTo(0, 0); return;
     }
     if (act === "finish") { var mn = mineOf(mid); mn.done = true; clearTimeout(timers["s" + mid]); pub("ans/" + r.t + "/" + r.p + "/" + mid, { a: mn.a, h: mn.h, done: true, ok: false, ts: Date.now() }); render(); window.scrollTo(0, 0); return; }
@@ -255,6 +255,7 @@
     if (act === "force") { var fk = el.getAttribute("data-k"); T(function (c) { c.force = c.force || {}; c.force[fk] = true; }); toast("Validation forcée"); render(); return; }
     if (act === "exopen") { ev.preventDefault(); var ek = el.getAttribute("data-k"); X.exOpen[ek] = !X.exOpen[ek]; render(); return; }
     if (act === "mreveal") { var k4 = el.getAttribute("data-m"); T(function (c) { c.reveal[k4] = !c.reveal[k4]; }); render(); return; }
+    if (act === "mext") { var k6 = el.getAttribute("data-m"); T(function (c) { c.ext = c.ext || {}; c.ext[k6] = !c.ext[k6]; }); render(); return; }
     if (act === "mhint") { var k5 = el.getAttribute("data-m"); T(function (c) { c.hints["*:" + k5] = !c.hints["*:" + k5]; }); render(); return; }
     if (act === "tdetail") { var tt = +el.getAttribute("data-t"); X.openT = X.openT === tt ? null : tt; render(); return; }
     if (act === "exportcsv") { download("cap-rempart-" + X.code + ".csv", csv(), "text/csv;charset=utf-8"); return; }
