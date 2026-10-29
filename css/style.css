@@ -108,3 +108,15 @@ details>summary{cursor:pointer;font-weight:700}
 .q .qt code,.mono-q{font-family:ui-monospace,Menlo,Consolas,monospace}
 @media (max-width:560px){h1{font-size:1.35rem}.zmap{grid-template-columns:repeat(4,1fr)}}
 @media print{body{background:#fff;color:#000}.copy,.toast{display:none}}
+
+/* v2 : jetons, bouton retour, legende */
+.tk{border-color:#9cc2ff;background:radial-gradient(circle at 35% 30%,#dbe9ff,#2f6fe0 62%)}
+.tk.imp{border-color:#ffb1a8;background:radial-gradient(circle at 35% 30%,#ffd5cf,#d6281a 65%)}
+.tk.sm{width:18px;height:18px;border-width:2px;display:inline-block;vertical-align:middle}
+.zc .sl i.f{background:#2f6fe0;border-color:#9cc2ff}
+.legend{margin:10px 0;padding:8px 12px;border-radius:10px;background:rgba(255,255,255,.08);font-size:.95rem}
+.legend .sep{display:inline-block;width:18px}
+.btn.big{font-size:1.15rem;padding:16px 22px;min-height:56px}
+.backbig{display:block;text-align:center;text-decoration:none;margin:10px 0;background:var(--navy3);color:var(--cream);border:2px solid var(--gold)}
+details.exd{margin:8px 0;border:1px solid #3a5f8c;border-radius:10px;padding:6px 10px}
+details.exd summary{cursor:pointer;font-weight:700;padding:6px 0}

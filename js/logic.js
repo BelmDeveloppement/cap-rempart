@@ -123,5 +123,20 @@ window.CR = window.CR || {};
   };
 
   CR.current = function (c, D) { var best = null, bt = -1; if (!c || !c.missions) return null; D.missions.forEach(function (m) { var cm = c.missions[m.id]; if (cm && cm.open && !cm.closed && cm.open > bt) { bt = cm.open; best = m; } }); return best; };
+  CR.elapsed = function (cm) { if (!cm || !cm.open) return 0; return Math.max(0, (cm.end || Date.now()) - cm.open); };
+  // ---- resultat d'une mission pour une table : moyenne des joueurs presents (tous egaux)
+  CR.computeTable = function (m, snap, byPlayer, crit, hintCount, freeHints) {
+    var idx = CR.applicable(m, snap.lvl), pts = 0, max = 0, per = {}, plist = Object.keys(byPlayer || {});
+    idx.forEach(function (i) {
+      var q = m.qs[i], s;
+      if (q.t === "open") s = CR.scoreQ(q, null, crit && crit[i]);
+      else { var sum = 0; plist.forEach(function (p) { sum += CR.scoreQ(q, (byPlayer[p] || {})[i]); }); s = plist.length ? sum / plist.length : 0; }
+      per[i] = s; pts += s * q.p; max += q.p;
+    });
+    var penalty = 0; if (!freeHints && CR.LEVELS[snap.lvl].hints === "penalty") penalty = hintCount || 0;
+    var net = Math.max(0, pts - penalty), pct = max ? net / max * 100 : 0;
+    var bar = pct >= snap.hi ? 2 : (pct >= snap.lo ? 1 : 0);
+    return { pts: Math.round(pts * 100) / 100, max: max, penalty: penalty, pct: Math.round(pct * 10) / 10, bar: bar, imp: bar === 0 ? 1 : 0, per: per };
+  };
   CR.mmss = function (ms) { ms = Math.max(0, ms); var s = Math.floor(ms / 1000), m = Math.floor(s / 60); return (m < 10 ? "0" : "") + m + ":" + (s % 60 < 10 ? "0" : "") + (s % 60); };
 })(window.CR);

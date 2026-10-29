@@ -55,7 +55,7 @@ window.CR = window.CR || {};
         h += "</div></div>";
       });
     } else if (q.t === "open") {
-      h += '<textarea ' + attr("open") + (ro ? " readonly" : "") + ' placeholder="Rédigez ici (le validateur saisit la version finale de la table)">' + esc(st || "") + "</textarea>";
+      h += '<textarea ' + attr("open") + (ro ? " readonly" : "") + ' placeholder="Rédigez votre réponse ici. Vous la comparerez ensuite avec celles de votre table.">' + esc(st || "") + "</textarea>";
     }
     if (o.hint) h += '<div class="hint">💡 ' + esc(q.h) + "</div>";
     if (o.hintBtn) h += '<button class="btn sec sm" data-act="hint" data-i="' + i + '">' + o.hintBtn + "</button>";
@@ -63,6 +63,8 @@ window.CR = window.CR || {};
     return h + "</div>";
   };
 
+  V.backBig = function (X) { return '<a class="btn big backbig" href="#/play/' + X.code + "/" + X.t + "/" + X.p + '">◀ Retour aux missions</a>'; };
+  V.legend = function () { return '<div class="legend"><span class="tk sm"></span> <b>Barrière</b> : jeton <b>bleu</b>, posé sur un emplacement de la zone <span class="sep"></span><span class="tk imp sm"></span> <b>Impact</b> : jeton <b>rouge</b>, posé sur la piste d\'Impact</div>'; };
   V.zoneChip = function (m) { return '<span class="badge" style="background:' + QCOL[m.quartier] + ';color:#fff">' + QNAME[m.quartier] + "</span>"; };
 
   // ----------------------------------------------------------------- accueil
@@ -103,9 +105,10 @@ window.CR = window.CR || {};
     h += '<div class="top">' + V.logo() + '<span class="grow"></span>' + V.tchip(X.t) + '<span class="chip">Joueur ' + X.p + "</span>" + V.status(X) + '<a class="btn sec sm" href="#/tower/' + X.code + "/" + X.t + '">Tour de contrôle</a></div>';
     h += V.banners(X);
     if (!c) return h + '<div class="card"><p>En attente de la séance de l\'enseignant (code <b>' + esc(X.code) + '</b>)…</p><p class="mut small">Si le message persiste : vérifiez le code, la connexion, ou prévenez l\'enseignant.</p></div>';
+    if (!X.briefOk) h += '<div class="banner pause">Le jeu démarre quand tous les joueurs de la table ont lu le briefing (en attente : ' + X.unread.map(function (p) { return "Joueur " + p; }).join(", ") + ').</div>';
     h += '<div class="card"><div class="row sp"><div><b>Niveau : ' + CR.LEVELS[c.level].label + '</b><div class="mut small">' + CR.LEVELS[c.level].desc + '</div></div><div class="right"><div class="small mut">Score de la table</div><div class="big">' + X.d.score + '</div></div></div></div>';
     var rows = "";
-    var br = '<a class="mrow" style="--qc:var(--K);text-decoration:none;color:inherit" href="#/m/' + X.code + "/" + X.t + "/" + X.p + '/0"><span class="n">0</span><span class="t"><b>Entrée · Briefing</b><span class="mut small">Bienvenue chez TransLor</span></span><span class="badge">Lire</span></a>';
+    var br = '<a class="mrow" style="--qc:var(--K);text-decoration:none;color:inherit" href="#/m/' + X.code + "/" + X.t + "/" + X.p + '/0"><span class="n">0</span><span class="t"><b>Entrée · Briefing</b><span class="mut small">Bienvenue chez TransLor</span></span>' + (X.docs["rd/" + X.t + "/" + X.p] ? '<span class="badge ok">✓ Lu</span>' : '<span class="badge warn">À lire</span>') + '</a>';
     rows += br;
     D.missions.forEach(function (m) {
       var cm = c.missions && c.missions[m.id]; var r = X.docs["res/" + X.t + "/" + m.id];
@@ -115,6 +118,7 @@ window.CR = window.CR || {};
       else if (cm && cm.closed) { badge = '<span class="badge bad">Fermée</span>'; }
       else if (cm && cm.open) { badge = '<span class="badge warn">▶ Ouverte</span>'; }
       else { badge = '<span class="badge">En attente</span>'; cls = " lock"; }
+      if (!X.briefOk && !r) { badge = '<span class="badge warn">Briefing à lire</span>'; cls = " lock"; }
       var mine = X.docs["ans/" + X.t + "/" + X.p + "/" + m.id];
       var extra = (!r && mine && mine.done) ? ' <span class="badge">Réponses envoyées</span>' : "";
       rows += '<a class="mrow' + cls + '" style="--qc:' + QCOL[m.quartier] + ';text-decoration:none;color:inherit" href="' + href + '"><span class="n">' + m.id + '</span><span class="t"><b>' + esc(m.title) + '</b><span class="mut small">' + esc(m.topic) + " · " + m.min + " min</span></span>" + badge + extra + "</a>";
@@ -127,10 +131,16 @@ window.CR = window.CR || {};
 
   // ----------------------------------------------------------------- briefing
   V.entree = function (X) {
-    var E = X.data.entree;
-    return '<div class="top">' + V.logo() + '<span class="grow"></span><a class="btn sec sm" href="#/play/' + X.code + "/" + X.t + "/" + X.p + '">← Retour</a></div>' +
+    var E = X.data.entree; var mine = !!X.docs["rd/" + X.t + "/" + X.p];
+    var h = '<div class="top">' + V.logo() + '<span class="grow"></span>' + V.tchip(X.t) + '<span class="chip">Joueur ' + X.p + "</span></div>" +
       '<div class="card light"><h2>' + esc(E.titre) + "</h2>" + E.texte.map(function (t) { return "<p>" + esc(t) + "</p>"; }).join("") +
-      '<h3>Comment jouer</h3><ol><li>Jouez la mission sur l\'application de votre table.</li><li>Posez sur la zone les Barrières indiquées par l\'application (0, 1 ou 2). Mission ratée : 1 Impact.</li><li>Attaque : retirez 1 Barrière de la zone visée ; zone sans Barrière : 1 Impact.</li></ol><p><b>Score de la table = Barrières restantes − Impacts.</b> Chacun répond seul, la table compare et discute, puis un joueur valide pour tous (le validateur change à chaque mission).</p></div>';
+      '<h3>Comment jouer</h3><ol><li>Jouez la mission sur l\'application : chacun répond seul.</li><li>Comparez vos réponses avec votre table, discutez des écarts, puis chaque joueur valide. Le résultat de la table est la moyenne des joueurs.</li><li>Posez sur la zone de la mission les <b>Barrières</b> indiquées (0, 1 ou 2). Mission ratée : 1 <b>Impact</b>.</li><li>Attaque : retirez 1 Barrière de la zone visée ; zone sans Barrière : 1 Impact.</li></ol>' +
+      V.legend() + '<p><b>Score de la table = Barrières restantes − Impacts.</b> Tous les joueurs sont égaux : aucun rôle particulier.</p></div>';
+    var pl = X.present.map(function (p) { var ok = !!X.docs["rd/" + X.t + "/" + p]; return '<span class="chip">Joueur ' + p + " : " + (ok ? "✓ a lu" : "n'a pas encore lu") + "</span>"; }).join(" ");
+    h += '<div class="card">' + (mine ? '<p><b>✓ Vous avez lu le briefing.</b></p>' : '<button class="btn ok big" data-act="readbrief">J\'ai lu le briefing</button>') +
+      '<p class="mut small">Le jeu ne commence que lorsque <b>tous les joueurs de la table</b> ont lu le briefing.</p><div class="chips">' + pl + "</div>" +
+      (X.briefOk ? '<p class="banner" style="background:#1d5a37">Tous les joueurs ont lu : la table peut jouer.</p>' : "") + "</div>";
+    return h;
   };
 
   // ----------------------------------------------------------------- mission (joueur)
@@ -140,7 +150,8 @@ window.CR = window.CR || {};
     h += '<div class="top">' + V.logo() + '<span class="grow"></span>' + V.tchip(X.t) + '<span class="chip">Joueur ' + X.p + "</span>" + V.status(X) + back + "</div>" + V.banners(X);
     var cm = c && c.missions && c.missions[m.id]; var r = X.docs["res/" + X.t + "/" + m.id];
     var rev = c && c.reveal && c.reveal[m.id];
-    h += '<div class="card" style="border-left:6px solid ' + QCOL[m.quartier] + '"><div class="row sp"><div><h2>Mission ' + m.id + " · " + esc(m.title) + "</h2>" + V.zoneChip(m) + ' <span class="badge">' + esc(m.chap) + " · " + esc(m.comp) + '</span></div><div class="right"><div class="mut small">Chrono (indicatif)</div><div class="big mono" data-chrono="' + m.id + '">' + (cm && cm.open ? CR.mmss(Date.now() - cm.open) : "--:--") + '</div><div class="mut small">Durée prévue ' + m.min + " min (cours inclus)</div></div></div><p>" + esc(m.brief) + "</p>" + (m.ex ? '<span class="badge warn">Exercice ' + m.ex + (m.ex === 4 ? " : fiche à rendre hors séance" : " du syllabus") + "</span>" : "") + "</div>";
+    h += '<div class="card" style="border-left:6px solid ' + QCOL[m.quartier] + '"><div class="row sp"><div><h2>Mission ' + m.id + " · " + esc(m.title) + "</h2>" + V.zoneChip(m) + ' <span class="badge">' + esc(m.chap) + " · " + esc(m.comp) + '</span></div><div class="right"><div class="mut small">Chrono (indicatif)</div><div class="big mono" data-chrono="' + m.id + '">' + (cm && cm.open ? CR.mmss(CR.elapsed(cm)) : "--:--") + '</div><div class="mut small">Durée prévue ' + m.min + " min (cours inclus)</div></div></div><p>" + esc(m.brief) + "</p>" + (m.ex ? '<span class="badge warn">Exercice ' + m.ex + (m.ex === 4 ? " : fiche à rendre hors séance" : " du syllabus") + "</span>" : "") + "</div>";
+    if (!X.briefOk && !r) return h + '<div class="card"><p>📖 Tous les joueurs de la table doivent d\'abord lire le briefing. En attente : ' + X.unread.map(function (p) { return "Joueur " + p; }).join(", ") + '.</p><a class="btn" href="#/m/' + X.code + "/" + X.t + "/" + X.p + '/0">Ouvrir le briefing</a></div>';
     if (!cm || !cm.open) {
       if (r || rev) { /* afficher quand meme */ }
       else return h + '<div class="card"><p>⏳ Cette mission n\'est pas encore ouverte. L\'enseignant la lancera.</p></div>';
@@ -176,68 +187,60 @@ window.CR = window.CR || {};
     return h;
   };
 
-  // mise en commun
+  // mise en commun (tous les joueurs sont egaux)
   V.common = function (X, m, idx, lvl) {
-    var players = []; for (var p = 1; p <= 5; p++) if (X.docs["join/" + X.t + "/" + p]) players.push(p);
-    var validator = X.validatorOf(m.id); var iAmVal = X.iAmVal(m.id);
-    var h = '<div class="card"><h2>Mise en commun</h2><p class="mut">Comparez vos réponses, discutez des écarts, puis <b>le validateur</b> enregistre la réponse de la table. Validateur de cette mission : <b>Joueur ' + validator + "</b>" + (validator === X.p ? " (c'est vous)" : "") + ".</p>";
-    var allDone = true; var st = [];
-    players.forEach(function (p) { var a = X.docs["ans/" + X.t + "/" + p + "/" + m.id]; var d = a && a.done; if (!d) allDone = false; st.push('<span class="chip">Joueur ' + p + " : " + (d ? "✓ terminé" : "en cours…") + "</span>"); });
+    var players = X.present.slice(); var mineOk = !!(X.mine[m.id] && X.mine[m.id].ok);
+    var h = '<div class="card"><h2>Mise en commun</h2><p class="mut">Comparez vos réponses, discutez des écarts. Vous pouvez modifier vos réponses. Quand vous êtes d\'accord avec le résultat de la discussion, cliquez sur « Je valide ». Le résultat de la table est calculé quand <b>tous</b> les joueurs ont validé.</p>';
+    var st = [];
+    players.forEach(function (p) { var a = X.docs["ans/" + X.t + "/" + p + "/" + m.id]; var d = a && a.done, ok = a && a.ok; st.push('<span class="chip">Joueur ' + p + " : " + (ok ? "✓ validé" : (d ? "terminé, n'a pas validé" : "répond encore…")) + "</span>"); });
     h += '<div class="chips">' + st.join(" ") + "</div></div>";
-    var fin = X.final[m.id];
-    if (!fin) { fin = X.final[m.id] = {}; }
     idx.forEach(function (i, n) {
       var q = m.qs[i]; var answers = players.map(function (p) { var a = X.docs["ans/" + X.t + "/" + p + "/" + m.id]; return a && a.a ? a.a[i] : undefined; });
       var given = answers.filter(function (a) { return a !== undefined; });
       var agree = given.every(function (a) { return CR.same(a, given[0]); });
-      var anyAns = answers.some(function (a) { return a !== undefined; });
-      if (fin[i] === undefined && iAmVal) fin[i] = CR.majority(q, answers);
+      var anyAns = given.length > 0;
       h += '<div class="card light"><div class="row sp"><b>Question ' + (n + 1) + (q.x ? " · bonus" : "") + '</b><span class="badge ' + (!anyAns ? "" : (agree ? "ok" : "warn")) + '">' + (!anyAns ? "pas de réponse" : (agree ? "Accord" : "À discuter")) + "</span></div>";
       h += '<div style="margin:6px 0">' + esc(q.q.length > 170 ? q.q.slice(0, 167) + "…" : q.q) + "</div>";
       if (q.t !== "open") h += '<div class="chips">' + players.map(function (p, k) { return '<span class="chipa">J' + p + " : " + esc(CR.fmt(q, answers[k])) + "</span>"; }).join("") + "</div>";
-      if (iAmVal) h += V.q(q, i, fin[i], { tg: "final", seed: m.id });
-      else if (q.t === "open") h += '<div class="mut small">Le validateur rédige la réponse commune.</div>';
+      else h += players.map(function (p, k) { return answers[k] ? '<div class="corr"><b>Joueur ' + p + "</b><br>" + esc(answers[k]).replace(/\n/g, "<br>") + "</div>" : ""; }).join("");
       h += "</div>";
     });
-    h += '<div class="card">';
-    if (iAmVal) {
-      h += (!allDone ? '<p class="banner pause">Certains joueurs n\'ont pas fini : vous pouvez attendre ou valider quand même.</p>' : "") +
-        '<div class="row"><button class="btn ok" data-act="validate">Valider la réponse de la table</button><button class="btn sec" data-act="recalc">Recalculer la majorité</button><button class="btn sec" data-act="reopen">← Modifier mes réponses</button></div>';
-    } else {
-      h += '<p>Attendez que le Joueur ' + validator + ' valide.</p><div class="row"><button class="btn sec" data-act="reopen">← Modifier mes réponses</button><button class="btn sec sm" data-act="takeover">Le validateur est absent : prendre la main</button></div>';
-    }
-    return h + "</div>";
+    h += '<div class="card"><div class="row">' + (mineOk ? '<span class="badge ok">✓ Vous avez validé, en attente des autres joueurs</span>' : '<button class="btn ok big" data-act="ready">Je valide</button>') + '<button class="btn sec" data-act="reopen">← Modifier mes réponses</button></div></div>';
+    return h;
   };
 
   // resultats
   V.results = function (X, m, r, idx) {
-    var snap = r.snap || {}; var h = ""; var graded = r.status === "graded";
-    var iAmVal = X.iAmVal(m.id) || r.by === X.p;
-    var hasOpen = idx.some(function (i) { return m.qs[i].t === "open"; });
+    var h = ""; var graded = r.status === "graded"; var ans = r.ans || {}; var plist = Object.keys(ans).map(Number).sort();
     h += '<div class="card" style="text-align:center">';
     if (graded) {
-      h += '<div class="mut">Résultat de la table</div><div class="big">' + Math.round(r.pct) + " %</div><div class=\"mut\">" + r.pts + " / " + r.max + " points" + (r.penalty ? " · −" + r.penalty + " pour indice(s)" : "") + "</div>";
-      h += '<div style="margin-top:8px;font-size:1.25rem"><b>' + (r.bar > 0 ? "Posez " + r.bar + " Barrière" + (r.bar > 1 ? "s" : "") + " sur la zone " + m.id + " · " + esc(m.title) : "Aucune Barrière à poser") + "</b></div>";
-      var tk = ""; for (var k = 0; k < r.bar; k++) tk += '<span class="tk" style="--tc:' + CR.COLORS[X.t - 1].c + '"></span>'; if (r.imp) tk += '<span class="tk imp"></span>';
+      h += '<div class="mut">Résultat de la table (moyenne des joueurs)</div><div class="big">' + Math.round(r.pct) + " %</div><div class=\"mut\">" + r.pts + " / " + r.max + " points" + (r.penalty ? " · −" + r.penalty + " pour indice(s)" : "") + "</div>";
+      h += '<div style="margin-top:8px;font-size:1.25rem"><b>' + (r.bar > 0 ? "Posez " + r.bar + " Barrière" + (r.bar > 1 ? "s" : "") + " bleue" + (r.bar > 1 ? "s" : "") + " sur la zone " + m.id + " · " + esc(m.title) : "Aucune Barrière à poser") + "</b></div>";
+      var tk = ""; for (var k = 0; k < r.bar; k++) tk += '<span class="tk"></span>'; if (r.imp) tk += '<span class="tk imp"></span>';
       h += '<div class="tokens" style="justify-content:center">' + tk + "</div>";
-      if (r.imp) h += '<div class="banner att">Mission en dessous du seuil : prenez <b>1 Impact</b> et placez-le sur la piste d\'Impact.</div>';
-    } else h += '<h2>Réponse enregistrée</h2><p>Évaluez maintenant vos réponses libres avec la grille ci-dessous, puis terminez l\'évaluation pour connaître vos Barrières.</p>';
+      if (r.imp) h += '<div class="banner att">Mission en dessous du seuil : prenez <b>1 Impact</b> (jeton rouge) et placez-le sur la piste d\'Impact.</div>';
+      h += V.legend();
+    } else h += '<h2>Réponses enregistrées</h2><p>Évaluez maintenant les réponses libres avec la grille ci-dessous (n\'importe quel joueur peut cocher, discutez ensemble), puis terminez l\'évaluation pour connaître vos Barrières.</p>';
     h += "</div>";
     idx.forEach(function (i, n) {
-      var q = m.qs[i]; var fa = r.final ? r.final[i] : undefined;
+      var q = m.qs[i];
       h += '<div class="card light"><div class="row sp"><b>Question ' + (n + 1) + (q.x ? " · bonus" : "") + '</b><span class="badge">' + Math.round((r.per && r.per[i] != null ? r.per[i] : 0) * 100) + " %</span></div>";
       if (q.t === "open") {
-        h += '<div class="qt" style="margin-top:6px">' + esc(q.q) + '</div><div class="corr"><b>Réponse de la table</b><br>' + esc(fa || "(aucune réponse)").replace(/\n/g, "<br>") + "</div>";
+        h += '<div class="qt" style="margin-top:6px">' + esc(q.q) + '</div>';
+        plist.forEach(function (p) { var t = (ans[p] || {})[i]; if (t) h += '<div class="corr"><b>Joueur ' + p + "</b><br>" + esc(t).replace(/\n/g, "<br>") + "</div>"; });
         h += '<div class="corr model"><b>Réponse modèle (exemple)</b><br>' + esc(q.model) + "</div>";
-        h += "<h3>Grille de critères</h3><div class=\"mut small\" style=\"color:#555\">Cochez les critères que votre réponse remplit réellement.</div>";
+        h += "<h3>Grille de critères</h3><div class=\"mut small\" style=\"color:#555\">Cochez les critères que vos réponses remplissent réellement.</div>";
         q.crit.forEach(function (cr, ci) {
           var on = r.crit && r.crit[i] && r.crit[i][ci];
-          h += '<label class="crit"><input type="checkbox" data-act="crit" data-i="' + i + '" data-c="' + ci + '" ' + (on ? "checked" : "") + (graded || !iAmVal ? " disabled" : "") + "><span>" + esc(cr) + "</span></label>";
+          h += '<label class="crit"><input type="checkbox" data-act="crit" data-i="' + i + '" data-c="' + ci + '" ' + (on ? "checked" : "") + (graded ? " disabled" : "") + "><span>" + esc(cr) + "</span></label>";
         });
-      } else h += V.q(q, i, fa, { show: true, ro: true, seed: m.id, tg: "none" }).replace('<div class="q" data-qi="' + i + '">', '<div data-qi="' + i + '">');
+      } else {
+        h += '<div class="chips">' + plist.map(function (p) { return '<span class="chipa">J' + p + " : " + esc(CR.fmt(q, (ans[p] || {})[i])) + "</span>"; }).join("") + "</div>";
+        h += V.q(q, i, undefined, { show: true, ro: true, seed: m.id, tg: "none" }).replace('<div class="q" data-qi="' + i + '">', '<div data-qi="' + i + '">');
+      }
       h += "</div>";
     });
-    if (hasOpen && !graded) h += '<div class="card">' + (iAmVal ? '<button class="btn ok" data-act="endgrade">Terminer l\'évaluation</button>' : '<p>Le validateur termine l\'évaluation de la grille.</p>') + "</div>";
+    if (!graded) h += '<div class="card"><button class="btn ok big" data-act="endgrade">Terminer l\'évaluation</button></div>';
     return h;
   };
 
@@ -246,7 +249,7 @@ window.CR = window.CR || {};
     var c = X.ctl, D = X.data, h = "";
     h += '<div class="top">' + V.logo() + '<span class="grow"></span>' + V.tchip(X.t) + '<span class="chip">Joueur ' + X.p + "</span>" + V.status(X) + '<a class="btn sec sm" href="#/play/' + X.code + "/" + X.t + "/" + X.p + '">← Missions</a></div>' + V.banners(X);
     var cf = c && c.missions && c.missions.F; var fr = X.docs["fin/" + X.t + "/" + X.p];
-    h += '<div class="card"><h2>QCM final · individuel</h2><p>20 questions, 20 minutes, sans consulter les autres. Chrono indicatif : <b class="mono" data-chrono="F">' + (cf && cf.open ? CR.mmss(Date.now() - cf.open) : "--:--") + "</b></p></div>";
+    h += '<div class="card"><h2>QCM final · individuel</h2><p>20 questions, 20 minutes, sans consulter les autres. Chrono indicatif : <b class="mono" data-chrono="F">' + (cf && cf.open ? CR.mmss(CR.elapsed(cf)) : "--:--") + "</b></p></div>";
     if (!cf && !fr) return h + '<div class="card"><p>⏳ Le QCM sera ouvert par l\'enseignant.</p></div>';
     var mine = X.mine.F || { a: {} };
     if (fr) {
@@ -277,14 +280,14 @@ window.CR = window.CR || {};
     var cur = CR.current(c, D);
     var cm = cur && c.missions[cur.id];
     h += '<div class="grid g2"><div class="card"><div class="mut">Mission en cours</div><div class="towerbig">' + (cur ? cur.id + " · " + esc(cur.title) : "—") + '</div><div class="mut">' + (cur ? esc(cur.topic) : "Aucune mission ouverte") + '</div></div>' +
-      '<div class="card"><div class="mut">Chrono (indicatif, non contraignant)</div><div class="towerbig mono" data-chrono="' + (cur ? cur.id : "") + '">' + (cm ? CR.mmss(Date.now() - cm.open) : "--:--") + '</div><div class="mut">' + (cur ? "Durée prévue : " + cur.min + " min (cours inclus)" : "") + "</div></div></div>";
+      '<div class="card"><div class="mut">Chrono (indicatif, non contraignant)</div><div class="towerbig mono" data-chrono="' + (cur ? cur.id : "") + '">' + (cm ? CR.mmss(CR.elapsed(cm)) : "--:--") + '</div><div class="mut">' + (cur ? "Durée prévue : " + cur.min + " min (cours inclus)" : "") + "</div></div></div>";
     // joueurs
     h += '<div class="card"><h3>Joueurs de la table</h3><div class="grid g3">';
     for (var p = 1; p <= 5; p++) {
       var j = X.docs["join/" + X.t + "/" + p]; var a = cur && X.docs["ans/" + X.t + "/" + p + "/" + cur.id];
       var tot = cur ? CR.applicable(cur, cm.lvl).length : 0; var n = a && a.a ? Object.keys(a.a).length : 0;
       var res = cur && X.docs["res/" + X.t + "/" + cur.id];
-      h += '<div class="card" style="margin:0;opacity:' + (j ? 1 : .4) + '"><b>Joueur ' + p + '</b> <span class="dot ' + (j ? "ok" : "") + '"></span><div class="bar" style="margin:6px 0"><i style="width:' + (tot ? Math.round(n / tot * 100) : 0) + '%"></i></div><div class="mut small">' + (j ? (cur ? (a && a.done ? "✓ réponses envoyées" : n + " / " + tot + " questions") : "connecté") : "absent") + "</div></div>";
+      h += '<div class="card" style="margin:0;opacity:' + (j ? 1 : .4) + '"><b>Joueur ' + p + '</b> <span class="dot ' + (j ? "ok" : "") + '"></span><div class="bar" style="margin:6px 0"><i style="width:' + (tot ? Math.round(n / tot * 100) : 0) + '%"></i></div><div class="mut small">' + (j ? (!X.docs["rd/" + X.t + "/" + p] ? "briefing non lu" : (cur ? (a && a.ok ? "✓ validé" : (a && a.done ? "terminé, à valider" : n + " / " + tot + " questions")) : "briefing lu")) : "absent") + "</div></div>";
     }
     h += "</div>" + (cur ? '<p class="mut">Validation de la table : ' + (X.docs["res/" + X.t + "/" + cur.id] ? "✓ faite" : "en attente") + "</p>" : "") + "</div>";
     // plateau
@@ -313,21 +316,23 @@ window.CR = window.CR || {};
       for (var t = 1; t <= c.tables; t++) { if (m.id === "F") { for (var p = 1; p <= 5; p++) { var f = X.docs["fin/" + t + "/" + p]; if (f) { vals.push(1); sum += f.pct; } } } else { var r = X.docs["res/" + t + "/" + m.id]; if (r && r.status === "graded") { vals.push(1); sum += r.pct; } } }
       var st = cm ? (cm.closed ? '<span class="badge bad">Fermée</span>' : '<span class="badge warn">Ouverte</span>') : '<span class="badge">À venir</span>';
       var hint = c.hints && (c.hints["*:" + m.id]);
-      h += "<tr><td>" + m.id + "</td><td><b>" + esc(m.title) + '</b><div class="mut small">' + esc(m.topic || "") + "</div></td><td>" + st + (cm && cm.open ? '<div class="mut small">' + CR.LEVELS[cm.lvl].label + " · " + cm.lo + "/" + cm.hi + "</div>" : "") + '</td><td class="mono" data-chrono="' + m.id + '">' + (cm && cm.open ? CR.mmss(Date.now() - cm.open) : "--:--") + "</td><td>" + vals.length + (m.id === "F" ? "" : " / " + c.tables) + "</td><td>" + (vals.length ? Math.round(sum / vals.length) + " %" : "—") + '</td><td class="row" style="gap:4px">' +
+      h += "<tr><td>" + m.id + "</td><td><b>" + esc(m.title) + '</b><div class="mut small">' + esc(m.topic || "") + "</div></td><td>" + st + (cm && cm.open ? '<div class="mut small">' + CR.LEVELS[cm.lvl].label + " · " + cm.lo + "/" + cm.hi + "</div>" : "") + '</td><td class="mono" data-chrono="' + m.id + '">' + (cm && cm.open ? CR.mmss(CR.elapsed(cm)) : "--:--") + "</td><td>" + vals.length + (m.id === "F" ? "" : " / " + c.tables) + "</td><td>" + (vals.length ? Math.round(sum / vals.length) + " %" : "—") + '</td><td class="row" style="gap:4px">' +
         (!cm ? '<button class="btn sm" data-act="mopen" data-m="' + m.id + '">Ouvrir</button>' : (cm.closed ? '<button class="btn sm sec" data-act="mreopen" data-m="' + m.id + '">Rouvrir</button>' : '<button class="btn sm sec" data-act="mclose" data-m="' + m.id + '">Fermer</button>')) +
         (m.id !== "F" ? '<button class="btn sm sec" data-act="mreveal" data-m="' + m.id + '">' + (c.reveal && c.reveal[m.id] ? "Corr. ✓" : "Révéler corr.") + '</button><button class="btn sm sec" data-act="mhint" data-m="' + m.id + '">' + (hint ? "Indices ✓" : "Indices offerts") + "</button>" : "") + "</td></tr>";
     });
     h += "</table></div>";
     // classement
     var rk = CR.rank(X.docs, c, c.tables, D);
-    h += '<div class="card"><h3>Classement des tables</h3><table class="table"><tr><th>Rang</th><th>Table</th><th>Joueurs</th><th>Mission en cours</th><th>Barrières</th><th>Impacts</th><th>Score</th><th></th></tr>';
+    h += '<div class="card"><h3>Classement des tables</h3><table class="table"><tr><th>Rang</th><th>Table</th><th>Joueurs</th><th>Briefing</th><th>Mission en cours</th><th>Barrières</th><th>Impacts</th><th>Score</th><th></th></tr>';
     rk.forEach(function (r) {
       var col = CR.COLORS[r.t - 1]; var np = 0; for (var p = 1; p <= 5; p++) if (X.docs["join/" + r.t + "/" + p]) np++;
       var cur = CR.current(c, D);
-      var stt = "—"; if (cur) { var rr = X.docs["res/" + r.t + "/" + cur.id]; var done = 0; for (var p2 = 1; p2 <= 5; p2++) { var a = X.docs["ans/" + r.t + "/" + p2 + "/" + cur.id]; if (a && a.done) done++; } stt = cur.id + " : " + (rr ? "✓ validée" : done + "/" + np + " ont fini"); }
-      h += '<tr class="' + (X.openT === r.t ? "hl" : "") + '"><td><b>' + r.rank + '</b></td><td><span class="dot" style="background:' + col.c + '"></span> Table ' + r.t + " · " + col.n + "</td><td>" + np + "</td><td>" + stt + "</td><td>" + r.d.barTotal + "</td><td>" + r.d.imp + '</td><td><b>' + r.d.score + '</b></td><td><button class="btn sm sec" data-act="tdetail" data-t="' + r.t + '">Détail</button></td></tr>';
+      var stt = "—"; var rdn = 0; for (var p3 = 1; p3 <= 5; p3++) if (X.docs["rd/" + r.t + "/" + p3]) rdn++;
+      var bf = np ? (rdn >= np ? "✓ " + rdn + "/" + np : rdn + "/" + np + (c.force && c.force[r.t + ":0"] ? " (forcé)" : ' <button class="btn sm sec" data-act="force" data-k="' + r.t + ':0">Forcer</button>')) : "—";
+      if (cur) { var rr = X.docs["res/" + r.t + "/" + cur.id]; var done = 0; for (var p2 = 1; p2 <= 5; p2++) { var a = X.docs["ans/" + r.t + "/" + p2 + "/" + cur.id]; if (a && a.ok) done++; } stt = cur.id + " : " + (rr ? "✓ validée" : done + "/" + np + " ont validé" + (c.force && c.force[r.t + ":" + cur.id] ? " (forcé)" : (done ? ' <button class="btn sm sec" data-act="force" data-k="' + r.t + ":" + cur.id + '">Valider avec les joueurs prêts</button>' : ""))); }
+      h += '<tr class="' + (X.openT === r.t ? "hl" : "") + '"><td><b>' + r.rank + '</b></td><td><span class="dot" style="background:' + col.c + '"></span> Table ' + r.t + " · " + col.n + "</td><td>" + np + "</td><td>" + bf + "</td><td>" + stt + "</td><td>" + r.d.barTotal + "</td><td>" + r.d.imp + '</td><td><b>' + r.d.score + '</b></td><td><button class="btn sm sec" data-act="tdetail" data-t="' + r.t + '">Détail</button></td></tr>';
       if (X.openT === r.t) {
-        h += '<tr><td colspan="8">' + V.zmap(D, r.d.bar, col.c) + '<div class="mut small" style="margin-top:6px">' + D.missions.filter(function (m) { return r.d.res[m.id]; }).map(function (m) { var q = r.d.res[m.id]; return m.id + " : " + Math.round(q.pct) + " %" + (q.status !== "graded" ? " (à noter)" : "") + " · indices " + (q.hints || 0); }).join(" | ") + (r.d.attacks.length ? "<br>Attaques : " + r.d.attacks.map(function (a) { return (a.outcome === "removed" ? "−1 Barrière zone " + a.zone : (a.outcome === "impact" ? "Impact (zone " + a.zone + ")" : "sans effet")); }).join(", ") : "") + "</div></td></tr>";
+        h += '<tr><td colspan="9">' + V.zmap(D, r.d.bar, col.c) + '<div class="mut small" style="margin-top:6px">' + D.missions.filter(function (m) { return r.d.res[m.id]; }).map(function (m) { var q = r.d.res[m.id]; return m.id + " : " + Math.round(q.pct) + " %" + (q.status !== "graded" ? " (à noter)" : "") + " · indices " + (q.hints || 0); }).join(" | ") + (r.d.attacks.length ? "<br>Attaques : " + r.d.attacks.map(function (a) { return (a.outcome === "removed" ? "−1 Barrière zone " + a.zone : (a.outcome === "impact" ? "Impact (zone " + a.zone + ")" : "sans effet")); }).join(", ") : "") + "</div></td></tr>";
       }
     });
     h += "</table></div>";
@@ -338,13 +343,23 @@ window.CR = window.CR || {};
       h += '<div class="card" style="margin:0;text-align:center"><b><span class="dot" style="background:' + col2.c + '"></span> Table ' + t + " · " + col2.n + '</b><div class="qr" data-qr="' + esc(jl) + '"></div><div class="small"><a href="' + esc(jl) + '" target="_blank">Lien joueurs</a> · <a href="' + esc(tl) + '" target="_blank">Tour de contrôle</a></div></div>';
     }
     h += "</div></div>";
-    // reponses libres
+    // exercices rediges
     var opens = [];
     D.missions.forEach(function (m) { m.qs.forEach(function (q, i) { if (q.t === "open") opens.push([m, i]); }); });
-    h += '<div class="card"><h3>Exercices rédigés (réponses des tables)</h3>';
+    h += '<div class="card"><h3>Exercices rédigés : énoncé, grille et réponses des tables</h3><p class="mut small">Cliquez sur un exercice pour l\'ouvrir.</p>';
     opens.forEach(function (mi) {
-      var m = mi[0], i = mi[1]; h += "<details><summary>Exercice " + (m.ex || "") + " · mission " + m.id + " " + esc(m.title) + "</summary>";
-      for (var t = 1; t <= c.tables; t++) { var r = X.docs["res/" + t + "/" + m.id]; if (r && r.final && r.final[i]) h += "<p><b>Table " + t + "</b> (critères cochés : " + ((r.crit && r.crit[i]) ? r.crit[i].filter(Boolean).length : 0) + " / " + m.qs[i].crit.length + ")<br>" + esc(r.final[i]).replace(/\n/g, "<br>") + "</p>"; }
+      var m = mi[0], i = mi[1], q = m.qs[i], key = "ex" + m.id + "_" + i; var isOpen = !!X.exOpen[key];
+      h += '<details class="exd"' + (isOpen ? " open" : "") + '><summary data-act="exopen" data-k="' + key + '">Exercice ' + (m.ex || "") + " · mission " + m.id + " " + esc(m.title) + "</summary>";
+      h += '<div class="corr"><b>Énoncé</b><br>' + esc(q.q) + "</div>";
+      h += "<p><b>Grille de critères</b></p><ul>" + q.crit.map(function (cr) { return "<li>" + esc(cr) + "</li>"; }).join("") + "</ul>";
+      h += '<div class="corr model"><b>Réponse modèle</b><br>' + esc(q.model) + "</div><h4>Réponses des tables</h4>";
+      var any = false;
+      for (var t = 1; t <= c.tables; t++) {
+        var r = X.docs["res/" + t + "/" + m.id]; if (!r || !r.ans) continue; any = true;
+        var txt = Object.keys(r.ans).map(function (p) { var v = (r.ans[p] || {})[i]; return v ? "<i>Joueur " + p + "</i> : " + esc(v).replace(/\n/g, "<br>") : ""; }).filter(Boolean).join("<br><br>");
+        h += "<p><b>Table " + t + "</b> (critères cochés : " + ((r.crit && r.crit[i]) ? r.crit[i].filter(Boolean).length : 0) + " / " + q.crit.length + ")<br>" + (txt || "(aucune réponse rédigée)") + "</p>";
+      }
+      if (!any) h += '<p class="mut small">Aucune table n\'a encore validé cette mission.</p>';
       h += "</details>";
     });
     h += "</div>";

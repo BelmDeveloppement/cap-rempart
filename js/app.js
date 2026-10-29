@@ -1,7 +1,7 @@
 /* (c) 2026 SAS BELM DEVELOPPEMENT. Tous droits reserves. */
 (function (CR) {
   var V = CR.V, esc = CR.esc;
-  var X = { data: null, docs: {}, ctl: null, mine: {}, final: {}, qpos: {}, takeover: {}, status: { s: "connecting" }, mode: "mqtt", net: null, code: null, route: null, pickP: 1, ready: false, openT: null, base: location.origin + location.pathname };
+  var X = { data: null, docs: {}, ctl: null, mine: {}, final: {}, qpos: {}, exOpen: {}, status: { s: "connecting" }, mode: "mqtt", net: null, code: null, route: null, pickP: 1, ready: false, openT: null, base: location.origin + location.pathname };
   var timers = {}; var dirty = false;
   function ls(k, v) { try { if (v === undefined) return localStorage.getItem(k); localStorage.setItem(k, v); } catch (e) { } return null; }
   function toast(t) { var el = document.getElementById("toast"); el.textContent = t; el.hidden = false; clearTimeout(timers.toast); timers.toast = setTimeout(function () { el.hidden = true; }, 2600); }
@@ -25,7 +25,7 @@
     var mode = r.q.net === "local" ? "local" : "mqtt"; var b = +(r.q.b || 0);
     if (X.net && X.code === r.code && X.mode === mode) return;
     if (X.net) X.net.close();
-    X.docs = {}; X.ctl = null; X.mine = {}; X.final = {}; X.ready = false; X.code = r.code; X.mode = mode;
+    X.docs = {}; X.ctl = null; X.mine = {}; X.final = {}; X.finishing = null; X.ready = false; X.code = r.code; X.mode = mode;
     var n = new CR.Net(r.code, b, mode); X.net = n;
     n.onstatus = function (s, d) { X.status = { s: s, d: d }; render(); };
     n.onmsg = function (topic, obj) { onDoc(topic, obj); };
@@ -36,7 +36,7 @@
     if (obj === null) { delete X.docs[topic]; } else X.docs[topic] = obj;
     if (topic === "ctl") X.ctl = obj;
     var p = topic.split("/");
-    if (p[0] === "ans" && X.route && +p[1] === X.route.t && +p[2] === X.route.p && obj && !X.mine[p[3]]) X.mine[p[3]] = { a: obj.a || {}, h: obj.h || [], done: !!obj.done };
+    if (p[0] === "ans" && X.route && +p[1] === X.route.t && +p[2] === X.route.p && obj && !X.mine[p[3]]) X.mine[p[3]] = { a: obj.a || {}, h: obj.h || [], done: !!obj.done, ok: !!obj.ok };
     if (p[0] === "fin" && X.route && +p[1] === X.route.t && +p[2] === X.route.p && obj && !X.mine.F) X.mine.F = { a: obj.a || {} };
     schedule();
   }
@@ -56,8 +56,8 @@
     if (r.t) {
       X.t = r.t; X.p = r.p;
       X.present = []; for (var p = 1; p <= 5; p++) if (X.docs["join/" + X.t + "/" + p]) X.present.push(p); if (X.p && X.present.indexOf(X.p) < 0) { X.present.push(X.p); X.present.sort(); }
-      X.validatorOf = function (mid) { var pl = X.present.length ? X.present : [1]; return pl[(+mid - 1) % pl.length]; };
-      X.iAmVal = function (mid) { return X.validatorOf(mid) === X.p || !!X.takeover[mid]; };
+      X.unread = X.present.filter(function (p) { return !X.docs["rd/" + X.t + "/" + p]; });
+      X.briefOk = !X.unread.length || !!(X.ctl && X.ctl.force && X.ctl.force[X.t + ":0"]);
       X.d = CR.derive(X.docs, X.ctl, X.t, D);
       X.nt = (X.ctl && X.ctl.tables) || 5;
       var rk = CR.rank(X.docs, X.ctl, X.nt, D); X.rank = 0; rk.forEach(function (z) { if (z.t === X.t) X.rank = z.rank; });
@@ -77,11 +77,28 @@
     }
     else if (r.view === "tower") html = V.tower(X);
     else if (r.view === "teacher") html = V.teacher(X);
+    if (r.view === "m" && r.m !== "0") { var bk = V.backBig(X); html = bk + html + bk; }
+    else if (r.view === "m") { var bk0 = V.backBig(X); html = bk0 + html + bk0; }
     if (r.t && r.view !== "landing") html += V.attackOverlay(X);
     document.getElementById("app").innerHTML = html;
     document.querySelectorAll("[data-qr]").forEach(function (el) { try { var q = qrcode(0, "M"); q.addData(el.getAttribute("data-qr")); q.make(); el.innerHTML = q.createSvgTag({ cellSize: 3, margin: 0, scalable: true }); } catch (e) { el.textContent = "QR indisponible"; } });
     if (r.view === "teacher" && !X.ctl && X.ready) { var saved = ls("cr_ctl_" + r.code); if (saved) { X.ctl = JSON.parse(saved); pub("ctl", X.ctl); } }
     updateChronos();
+    maybeFinish();
+  }
+  // tous les joueurs presents ont valide : la table publie le resultat (idempotent)
+  function maybeFinish() {
+    var r = X.route; if (!r || r.view !== "m" || !X.ready || !X.ctl || r.m === "0" || r.m === "F") return;
+    var m = X.data.missions[+r.m - 1]; if (!m || X.docs["res/" + X.t + "/" + m.id]) return;
+    var cm = X.ctl.missions && X.ctl.missions[m.id]; if (!cm || !cm.open) return;
+    var need = X.present.slice(); var force = X.ctl.force && X.ctl.force[X.t + ":" + m.id];
+    var ready = need.filter(function (p) { var d = X.docs["ans/" + X.t + "/" + p + "/" + m.id]; return d && d.done && d.ok; });
+    if (!ready.length || (!force && ready.length < need.length)) return;
+    if (X.finishing === X.t + ":" + m.id) return; X.finishing = X.t + ":" + m.id;
+    var res = buildRes(m, m.id, "graded", {}, null);
+    var hasOpen = CR.applicable(m, res.snap.lvl).some(function (i) { return m.qs[i].t === "open"; });
+    if (hasOpen) res.status = "pending";
+    pub("res/" + X.t + "/" + m.id, res);
   }
   function afterReady() {
     var r = X.route; if (!r || !r.t) return;
@@ -96,7 +113,7 @@
     var c = X.ctl; if (!c) return;
     document.querySelectorAll("[data-chrono]").forEach(function (el) {
       var id = el.getAttribute("data-chrono"); var cm = c.missions && c.missions[id]; if (!cm || !cm.open) { if (id) el.textContent = "--:--"; return; }
-      el.textContent = CR.mmss(Date.now() - cm.open);
+      el.textContent = CR.mmss(CR.elapsed(cm));
     });
   }
   setInterval(function () { updateChronos(); if (dirty) { var ae = document.activeElement; if (!ae || ae === document.body) render(); } }, 1000);
@@ -125,13 +142,13 @@
 
   function buildRes(m, mid, status, crit, existing) {
     var c = X.ctl, cm = c.missions[mid]; var snap = (existing && existing.snap) || { lvl: cm.lvl, lo: cm.lo, hi: cm.hi };
-    var players = X.present, hs = {};
-    players.forEach(function (p) { var a = X.docs["ans/" + X.t + "/" + p + "/" + mid]; if (a && a.h) a.h.forEach(function (i) { hs[i] = 1; }); });
-    var hc = Object.keys(hs).length;
+    var force = c.force && c.force[X.t + ":" + mid]; var hs = {}, by = {};
+    if (existing && existing.ans) by = existing.ans;
+    else X.present.forEach(function (p) { var d = X.docs["ans/" + X.t + "/" + p + "/" + mid]; if (d && d.done && (d.ok || force)) { by[p] = d.a || {}; if (d.h) d.h.forEach(function (i) { hs[i] = 1; }); } });
+    var hc = existing ? existing.hints : Object.keys(hs).length;
     var free = !!(c.hints && (c.hints[X.t + ":" + mid] || c.hints["*:" + mid]));
-    var fin = (existing && existing.final) || X.final[mid] || {};
-    var r = CR.compute(m, snap, fin, crit, hc, free);
-    return { m: +mid, snap: snap, final: fin, crit: crit, hints: hc, free: free, pts: r.pts, max: r.max, penalty: r.penalty, pct: r.pct, bar: r.bar, imp: r.imp, per: r.per, status: status, by: X.p, ts: Date.now() };
+    var r = CR.computeTable(m, snap, by, crit, hc, free);
+    return { m: +mid, snap: snap, ans: by, crit: crit, hints: hc, free: free, pts: r.pts, max: r.max, penalty: r.penalty, pct: r.pct, bar: r.bar, imp: r.imp, per: r.per, status: status, by: X.p, ts: Date.now() };
   }
 
   // ---------------------------------------------------------------- enseignant
@@ -203,7 +220,6 @@
     if (act === "msgok") { ls("crmsg/" + X.code + "/" + X.t + "/" + X.p, String(X.ctl.msg.id)); render(); return; }
     if (["qcm", "multi", "grid", "up", "down"].indexOf(act) >= 0) {
       var tg = el.getAttribute("data-tg"), i2 = +el.getAttribute("data-i");
-      if (tg === "final") { var fm = X.final[mid] || (X.final[mid] = {}); applyAnswer(fm, i2, m.qs[i2], el); render(); return; }
       if (tg === "ans") { var key = mid === "F" ? "F" : mid; var st = mineOf(key); var qq = mid === "F" ? D.final[i2] : m.qs[i2]; applyAnswer(st.a, i2, qq, el); saveMine(key); render(); return; }
       return;
     }
@@ -212,17 +228,12 @@
       var len = mid === "F" ? D.final.length : CR.applicable(m, (X.ctl.missions[mid] || {}).lvl || X.ctl.level).length;
       var cur = X.qpos[mid] || 0; cur += act === "next" ? 1 : -1; X.qpos[mid] = Math.max(0, Math.min(len - 1, cur)); render(); window.scrollTo(0, 0); return;
     }
-    if (act === "finish") { var mn = mineOf(mid); mn.done = true; clearTimeout(timers["s" + mid]); pub("ans/" + r.t + "/" + r.p + "/" + mid, { a: mn.a, h: mn.h, done: true, ts: Date.now() }); render(); window.scrollTo(0, 0); return; }
-    if (act === "reopen") { var mo = mineOf(mid); mo.done = false; pub("ans/" + r.t + "/" + r.p + "/" + mid, { a: mo.a, h: mo.h, done: false, ts: Date.now() }); render(); return; }
-    if (act === "takeover") { X.takeover[mid] = true; render(); return; }
-    if (act === "recalc") { delete X.final[mid]; render(); return; }
-    if (act === "validate") {
-      var res = buildRes(m, mid, "graded", {}, null); var hasOpen = CR.applicable(m, res.snap.lvl).some(function (i) { return m.qs[i].t === "open"; });
-      if (hasOpen) res.status = "pending";
-      pub("res/" + r.t + "/" + mid, res); toast("Réponse de la table enregistrée"); window.scrollTo(0, 0); return;
-    }
+    if (act === "finish") { var mn = mineOf(mid); mn.done = true; clearTimeout(timers["s" + mid]); pub("ans/" + r.t + "/" + r.p + "/" + mid, { a: mn.a, h: mn.h, done: true, ok: false, ts: Date.now() }); render(); window.scrollTo(0, 0); return; }
+    if (act === "reopen") { var mo = mineOf(mid); mo.done = false; mo.ok = false; pub("ans/" + r.t + "/" + r.p + "/" + mid, { a: mo.a, h: mo.h, done: false, ok: false, ts: Date.now() }); render(); return; }
+    if (act === "ready") { var mr = mineOf(mid); mr.ok = true; pub("ans/" + r.t + "/" + r.p + "/" + mid, { a: mr.a, h: mr.h, done: true, ok: true, ts: Date.now() }); toast("Votre validation est enregistrée"); render(); window.scrollTo(0, 0); return; }
+    if (act === "readbrief") { pub("rd/" + r.t + "/" + r.p, { ts: Date.now() }); render(); window.scrollTo(0, 0); return; }
     if (act === "crit") {
-      var rr = JSON.parse(JSON.stringify(X.docs["res/" + r.t + "/" + mid])); var ci = +el.getAttribute("data-c"), qi = +el.getAttribute("data-i");
+      var rr = JSON.parse(JSON.stringify(X.docs["res/" + r.t + "/" + mid])); if (rr.status === "graded") return; var ci = +el.getAttribute("data-c"), qi = +el.getAttribute("data-i");
       rr.crit = rr.crit || {}; rr.crit[qi] = rr.crit[qi] || m.qs[qi].crit.map(function () { return false; }); rr.crit[qi][ci] = el.checked;
       var upd = buildRes(m, mid, "pending", rr.crit, rr); pub("res/" + r.t + "/" + mid, upd); return;
     }
@@ -238,9 +249,11 @@
     if (act === "pause") { T(function (c) { c.paused = !c.paused; }); render(); return; }
     if (act === "sendmsg") { var txt = document.getElementById("in-msg").value.trim(); if (!txt) return; T(function (c) { c.msg = { id: Date.now(), text: txt }; }); document.getElementById("in-msg").value = ""; toast("Message envoyé"); return; }
     if (act === "attack") { var z = document.getElementById("in-az").value; T(function (c) { c.attacks.push({ id: "a" + Date.now().toString(36), seed: Math.random().toString(36).slice(2, 8), zone: z ? +z : 0, ts: Date.now() }); }); toast("Attaque lancée"); return; }
-    if (act === "mopen") { var k = el.getAttribute("data-m"); T(function (c) { c.missions[k] = { open: Date.now(), closed: false, lvl: c.level, lo: c.lo, hi: c.hi }; }); render(); return; }
-    if (act === "mclose") { var k2 = el.getAttribute("data-m"); T(function (c) { c.missions[k2].closed = true; }); render(); return; }
-    if (act === "mreopen") { var k3 = el.getAttribute("data-m"); T(function (c) { c.missions[k3].closed = false; }); render(); return; }
+    if (act === "mopen") { var k = el.getAttribute("data-m"); T(function (c) { var now = Date.now(); Object.keys(c.missions).forEach(function (o) { if (o !== k && c.missions[o].open && !c.missions[o].end) c.missions[o].end = now; }); c.missions[k] = { open: now, closed: false, lvl: c.level, lo: c.lo, hi: c.hi }; }); render(); return; }
+    if (act === "mclose") { var k2 = el.getAttribute("data-m"); T(function (c) { c.missions[k2].closed = true; if (!c.missions[k2].end) c.missions[k2].end = Date.now(); }); render(); return; }
+    if (act === "mreopen") { var k3 = el.getAttribute("data-m"); T(function (c) { var cm3 = c.missions[k3]; cm3.closed = false; if (cm3.end) { cm3.open += Date.now() - cm3.end; delete cm3.end; } }); render(); return; }
+    if (act === "force") { var fk = el.getAttribute("data-k"); T(function (c) { c.force = c.force || {}; c.force[fk] = true; }); toast("Validation forcée"); render(); return; }
+    if (act === "exopen") { ev.preventDefault(); var ek = el.getAttribute("data-k"); X.exOpen[ek] = !X.exOpen[ek]; render(); return; }
     if (act === "mreveal") { var k4 = el.getAttribute("data-m"); T(function (c) { c.reveal[k4] = !c.reveal[k4]; }); render(); return; }
     if (act === "mhint") { var k5 = el.getAttribute("data-m"); T(function (c) { c.hints["*:" + k5] = !c.hints["*:" + k5]; }); render(); return; }
     if (act === "tdetail") { var tt = +el.getAttribute("data-t"); X.openT = X.openT === tt ? null : tt; render(); return; }
@@ -254,7 +267,7 @@
   });
   document.addEventListener("input", function (ev) {
     var el = ev.target; if (el.getAttribute("data-act") !== "open") return; var tg = el.getAttribute("data-tg"), i = +el.getAttribute("data-i"); var r = X.route; var mid = r.m;
-    if (tg === "final") { (X.final[mid] || (X.final[mid] = {}))[i] = el.value; } else { mineOf(mid).a[i] = el.value; saveMine(mid); }
+    mineOf(mid).a[i] = el.value; saveMine(mid);
   });
 
   // ---------------------------------------------------------------- demarrage
